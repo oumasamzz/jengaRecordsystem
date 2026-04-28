@@ -3,7 +3,9 @@ from flask import Flask, render_template, request, jsonify
 import firebase_admin
 from firebase_admin import credentials, storage, firestore
 
-app = Flask(__name__)
+app = Flask(__name__, 
+            template_folder='../templates', 
+            static_folder='../static')
 
 # 1. Initialize Firebase
 # Make sure your JSON key is in the same folder
