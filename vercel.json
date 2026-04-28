@@ -7,10 +7,13 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/reports", "destination": "api/app.py" },
-    { "source": "/api/upload", "destination": "api/app.py" },
-    { "source": "/api/delete/(.*)", "destination": "api/app.py" },
-    { "source": "/api/health", "destination": "api/app.py" },
-    { "source": "/(.*)", "destination": "api/app.py" }
+    {
+      "source": "/api/(.*)",
+      "destination": "api/app.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "api/app.py"
+    }
   ]
 }
