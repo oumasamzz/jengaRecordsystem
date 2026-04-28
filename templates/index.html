@@ -172,22 +172,18 @@
         // --- API INTEGRATION ---
 
         // 1. Fetch all reports from the Backend (Flask + Firestore)
-        async function loadReports() {
-            const container = document.getElementById('reports-container');
-            container.innerHTML = '<p>Loading reports...</p>';
-            
-            try {
-                const response = await fetch('/api/reports');
-                const reports = await response.json();
-                
-                container.innerHTML = ''; // Clear loading text
-                reports.forEach(report => {
-                    container.appendChild(createReportCard(report));
-                });
-            } catch (err) {
-                container.innerHTML = '<p>Error loading reports. Check if backend is running.</p>';
-            }
-        }
+       async function loadReports() {
+    try {
+        // Use relative path so it works on both local and live
+        const response = await fetch('/api/reports'); 
+        if (!response.ok) throw new Error('Backend error');
+        const reports = await response.json();
+        // ... rest of your code
+    } catch (err) {
+        document.getElementById('reports-container').innerHTML = 
+            `<p style="color:red">Backend Error: ${err.message}</p>`;
+    }
+}
 
         // 2. Handle File Upload
         async function handleUpload() {
