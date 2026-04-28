@@ -1,33 +1,54 @@
 import os
 import json
-from flask import Flask, render_template, request, jsonify
 import firebase_admin
+from flask import Flask, render_template, request, jsonify
 from firebase_admin import credentials, storage, firestore
 
-# Initialize Flask with absolute pathing for Vercel
-base_dir = os.path.dirname(os.path.abspath(__file__))
-template_dir = os.path.join(base_dir, '../templates')
+# --- PATH FIXES ---
+# Vercel needs absolute paths to find the templates folder from the api folder
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+template_dir = os.path.join(base_dir, 'templates')
 
 app = Flask(__name__, template_folder=template_dir)
 
-# 1. Initialize Firebase (Vercel-Friendly Version)
-if not firebase_admin._apps:
-    firebase_config = os.environ.get("FIREBASE_CONFIG")
-    
-    if firebase_config:
-        # If running on Vercel, use the Environment Variable
-        cred_dict = json.loads(firebase_config)
-        cred = credentials.Certificate(cred_dict)
-    else:
-        # Fallback for local testing - ensure this file exists locally!
-        cred = credentials.Certificate(os.path.join(base_dir, "serviceAccountKey.json"))
+# --- FIREBASE INITIALIZATION ---
+def init_firebase():
+    if not firebase_admin._apps:
+        # Check Environment Variable first (For Vercel)
+        fb_config = os.environ.get("FIREBASE_CONFIG")
+        
+        if fb_config:
+            try:
+                # Critical: strict=False handles potential whitespace issues in the JSON string
+                cred_dict = json.loads(fb_config, strict=False)
+                cred = credentials.Certificate(cred_dict)
+            except Exception as e:
+                print(f"JSON Parse Error: {e}")
+                return None
+        else:
+            # Fallback to local file (For Local Dev)
+            # Make sure this file is inside your /api folder for local testing
+            local_key = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+            if os.path.exists(local_key):
+                cred = credentials.Certificate(local_key)
+            else:
+                print("No Firebase Credentials found!")
+                return None
 
-    firebase_admin.initialize_app(cred, {
-        'storageBucket': 'your-project-id.appspot.com' # CHANGE THIS to your real bucket ID
-    })
+        return firebase_admin.initialize_app(cred, {
+            'storageBucket': 'jenga-africa-xxx.appspot.com' # REPLACE WITH YOUR ACTUAL BUCKET
+        })
 
-db = firestore.client()
-bucket = storage.bucket()
+# Initialize safely
+firebase_app = init_firebase()
+
+# Only create clients if initialization succeeded
+if firebase_app:
+    db = firestore.client()
+    bucket = storage.bucket()
+else:
+    db = None
+    bucket = None
 
 @app.route('/')
 def index():
@@ -35,6 +56,8 @@ def index():
 
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
+    if not db:
+        return jsonify({"error": "Database not initialized. Check Vercel Environment Variables."}), 500
     try:
         reports_ref = db.collection('reports')
         docs = reports_ref.stream()
@@ -45,14 +68,16 @@ def get_reports():
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
+    if not bucket:
+        return jsonify({"error": "Storage not initialized"}), 500
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "No file"}), 400
-            
-        file = request.files['file']
+        file = request.files.get('file')
         title = request.form.get('title')
         year = request.form.get('year')
         
+        if not file:
+            return jsonify({"error": "No file uploaded"}), 400
+            
         blob = bucket.blob(f"reports/{file.filename}")
         blob.upload_from_file(file)
         blob.make_public()
@@ -79,15 +104,18 @@ def delete(report_id):
         doc = doc_ref.get().to_dict()
         
         if doc:
-            # Extract filename from URL to delete from storage
-            filename = doc['url'].split('/')[-1].split('?')[0]
-            bucket.blob(f"reports/{filename}").delete()
-            doc_ref.delete()
+            # Storage delete
+            try:
+                filename = doc['url'].split('/')[-1].split('?')[0]
+                bucket.blob(f"reports/{filename}").delete()
+            except:
+                pass # Continue if file is already gone
             
+            doc_ref.delete()
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Required for local testing only; Vercel ignores this
+# Local development
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(port=5000, debug=True)
