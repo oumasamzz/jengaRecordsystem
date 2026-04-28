@@ -21,7 +21,7 @@ def initialize_firebase():
                 # strict=False handles newline characters in the private key
                 cred_dict = json.loads(fb_config, strict=False)
                 return firebase_admin.initialize_app(credentials.Certificate(cred_dict), {
-                    'storageBucket': 'jenga-africa-xxx.appspot.com' # <--- UPDATE THIS
+                    'storageBucket': 'jengareports.appspot.com' # <--- UPDATE THIS
                 })
             except Exception as e:
                 print(f"Firebase Config Error: {e}")
