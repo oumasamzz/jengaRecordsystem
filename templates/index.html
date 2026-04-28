@@ -3,263 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jenga Africa - Annual Reports Portal</title>
+    <title>Jenga Africa - Reports</title>
     <style>
-        /* Base Styles (Dark Theme) */
-        body {
-            background-color: #121212;
-            color: #fff;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            line-height: 1.6;
-        }
-
         :root {
-            --primary-gradient: linear-gradient(135deg, #FF9966 0%, #CC66FF 100%);
-            --text-color-light: #aaa;
-            --card-bg: #1e1e1e;
+            --primary: linear-gradient(135deg, #FF9966 0%, #CC66FF 100%);
+            --bg: #121212;
+            --card: #1e1e1e;
         }
-
-        .container { max-width: 1200px; margin: 0 auto; padding: 40px; }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 40px;
-            border-bottom: 1px solid #333;
-        }
-
-        h1 {
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-        }
-
-        /* NEW: Admin Section Styling */
-        .admin-section {
-            background: #1a1a1a;
-            border: 1px dashed #444;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 40px;
-        }
-
-        .upload-form {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr auto;
-            gap: 15px;
-            align-items: end;
-        }
-
-        input, select {
-            background: #2a2a2a;
-            border: 1px solid #444;
-            color: white;
-            padding: 10px;
-            border-radius: 6px;
-        }
-
-        /* Reports Grid */
-        .reports-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 30px;
-            margin-top: 40px;
-        }
-
-        .report-card {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 25px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            transition: transform 0.3s ease;
-            position: relative;
-        }
-
-        .report-card:hover { transform: translateY(-5px); }
-
-        .report-icon {
-            font-size: 3.5rem;
-            margin-bottom: 15px;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-            cursor: pointer;
-            border: none;
-            transition: 0.3s;
-        }
-
-        .btn-view { background-color: #333; color: #fff; }
-        .btn-download { background: var(--primary-gradient); color: #fff; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
+        h1 { background: var(--primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 3rem; }
         
-        /* Delete Button for Admin */
-        .btn-delete {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: none;
-            color: #ff4d4d;
-            border: none;
-            cursor: pointer;
-            font-size: 0.8rem;
-        }
+        /* Admin Panel */
+        .admin-panel { background: #1a1a1a; border: 1px dashed #444; padding: 20px; border-radius: 12px; margin-bottom: 40px; display: none; }
+        .upload-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        input { background: #2a2a2a; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; }
 
-        #pdf-viewer {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 1000;
-        }
-
-        #pdf-iframe { width: 80%; height: 85%; margin: 2% auto; display: block; }
-        .close-viewer { position: absolute; top: 20px; right: 40px; color: white; font-size: 2rem; cursor: pointer; }
+        /* Grid */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; margin-top: 30px; }
+        .card { background: var(--card); padding: 25px; border-radius: 15px; text-align: center; position: relative; transition: 0.3s; }
+        .card:hover { transform: translateY(-5px); }
+        .icon { font-size: 3rem; margin-bottom: 10px; background: var(--primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .btn { padding: 10px 18px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-main { background: var(--primary); color: white; }
+        .btn-sec { background: #333; color: white; margin-right: 5px; }
+        .btn-del { position: absolute; top: 10px; right: 10px; background: none; color: #ff4d4d; border: none; cursor: pointer; }
+        
+        #pdf-viewer { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:9999; }
+        iframe { width: 80%; height: 85%; margin: 2% auto; display: block; border: none; }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <div class="logo">JENGA AFRICA</div>
-            <button class="btn btn-view" onclick="toggleAdmin()">Admin Toggle</button>
+        <header style="display:flex; justify-content:space-between; align-items:center;">
+            <h1>Annual <span style="color:white">Reports</span></h1>
+            <button class="btn btn-sec" onclick="document.getElementById('admin-panel').style.display='block'">Admin</button>
         </header>
 
-        <main>
-            <h1>Annual <span style="color: white;">Reports</span></h1>
-            
-            <div id="admin-panel" class="admin-section" style="display: none;">
-                <h3>Upload New Report</h3>
-                <div class="upload-form">
-                    <div>
-                        <label>Title</label><br>
-                        <input type="text" id="up-title" placeholder="e.g. 2025 Audit" style="width: 90%;">
-                    </div>
-                    <div>
-                        <label>Year</label><br>
-                        <input type="number" id="up-year" value="2026">
-                    </div>
-                    <div>
-                        <label>File</label><br>
-                        <input type="file" id="up-file">
-                    </div>
-                    <button class="btn btn-download" onclick="handleUpload()">Upload</button>
-                </div>
+        <div id="admin-panel" class="admin-panel">
+            <h3>Upload Report</h3>
+            <div class="upload-row">
+                <input type="text" id="up-title" placeholder="Report Title">
+                <input type="number" id="up-year" value="2026">
+                <input type="file" id="up-file">
+                <button class="btn btn-main" onclick="uploadFile()">Submit</button>
             </div>
+        </div>
 
-            <div class="reports-grid" id="reports-container">
-                </div>
-        </main>
+        <div class="grid" id="container"></div>
     </div>
 
     <div id="pdf-viewer">
-        <span class="close-viewer" onclick="closeViewer()">&times;</span>
-        <iframe id="pdf-iframe" src=""></iframe>
+        <button onclick="closePDF()" style="position:absolute; top:20px; right:40px; color:white; font-size:2rem; background:none; border:none; cursor:pointer;">&times;</button>
+        <iframe id="pdf-frame" src=""></iframe>
     </div>
 
     <script>
-        // --- API INTEGRATION ---
+        const API_KEY = "Tandy254./";
 
-        // 1. Fetch all reports from the Backend (Flask + Firestore)
-       async function loadReports() {
-    try {
-        // Use relative path so it works on both local and live
-        const response = await fetch('/api/reports'); 
-        if (!response.ok) throw new Error('Backend error');
-        const reports = await response.json();
-        // ... rest of your code
-    } catch (err) {
-        document.getElementById('reports-container').innerHTML = 
-            `<p style="color:red">Backend Error: ${err.message}</p>`;
-    }
-}
+        async function loadReports() {
+            const res = await fetch('/api/reports');
+            const data = await res.json();
+            const cont = document.getElementById('container');
+            cont.innerHTML = '';
+            
+            data.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                let icon = r.type === 'pdf' ? '📕' : (r.type?.includes('xl') ? '📗' : '📄');
+                card.innerHTML = `
+                    <button class="btn-del" onclick="deleteReport('${r.id}')">✕</button>
+                    <div class="icon">${icon}</div>
+                    <h3>${r.title}</h3>
+                    <p style="color:#888">${r.year}</p>
+                    <button class="btn btn-sec" onclick="openPDF('${r.url}')">View</button>
+                    <a href="${r.url}" class="btn btn-main" download>Download</a>
+                `;
+                cont.appendChild(card);
+            });
+        }
 
-        // 2. Handle File Upload
-        async function handleUpload() {
-            const fileInput = document.getElementById('up-file');
+        async function uploadFile() {
+            const file = document.getElementById('up-file').files[0];
             const title = document.getElementById('up-title').value;
             const year = document.getElementById('up-year').value;
+            if(!file || !title) return alert("Missing fields");
 
-            if (!fileInput.files[0] || !title) return alert("Please provide title and file");
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('title', title);
+            fd.append('year', year);
 
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('title', title);
-            formData.append('year', year);
-
-            const res = await fetch('/api/upload', { method: 'POST', body: formData });
-            const result = await res.json();
-            
-            if (result.success) {
-                alert("Upload successful!");
-                loadReports(); // Refresh the list
-            }
+            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            if(res.ok) { alert("Success!"); loadReports(); }
         }
 
-        // 3. Handle Delete
         async function deleteReport(id) {
-    const password = prompt("Enter Admin Password to delete:");
-    if (password !== "JENGA_ADMIN_2026") return alert("Wrong password!");
-
-    const res = await fetch(`/api/delete/${id}`, { 
-        method: 'DELETE',
-        headers: { "X-Admin-Key": password } 
-    });
-    if (res.ok) loadReports();
-}
-
-        // --- UI HELPERS ---
-
-        function createReportCard(report) {
-            const card = document.createElement('div');
-            card.classList.add('report-card');
-            
-            let icon = '📄';
-            if (report.type === 'pdf') icon = '📕';
-            if (report.type?.includes('xls')) icon = '📗';
-            if (report.type?.includes('doc')) icon = '📘';
-
-            card.innerHTML = `
-                <button class="btn-delete" onclick="deleteReport('${report.id}')">Delete ✕</button>
-                <div class="report-icon">${icon}</div>
-                <div class="report-title">${report.title}</div>
-                <div class="report-year">${report.year}</div>
-                <div class="button-group">
-                    ${report.type === 'pdf' ? `<button class="btn btn-view" onclick="viewPDF('${report.url}')">View</button>` : ''}
-                    <a class="btn btn-download" href="${report.url}" target="_blank" download>Download</a>
-                </div>
-            `;
-            return card;
+            if(!confirm("Delete?")) return;
+            const res = await fetch(`/api/delete/${id}`, { 
+                method: 'DELETE',
+                headers: { 'X-Admin-Key': API_KEY }
+            });
+            if(res.ok) loadReports();
         }
 
-        function toggleAdmin() {
-            const panel = document.getElementById('admin-panel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        function openPDF(url) { 
+            document.getElementById('pdf-frame').src = url; 
+            document.getElementById('pdf-viewer').style.display='block'; 
+        }
+        function closePDF() { 
+            document.getElementById('pdf-viewer').style.display='none'; 
+            document.getElementById('pdf-frame').src = ''; 
         }
 
-        function viewPDF(url) {
-            document.getElementById('pdf-iframe').src = url;
-            document.getElementById('pdf-viewer').style.display = 'block';
-        }
-
-        function closeViewer() {
-            document.getElementById('pdf-viewer').style.display = 'none';
-            document.getElementById('pdf-iframe').src = '';
-        }
-
-        // Initial Load
-        window.onload = loadReports;
+        loadReports();
     </script>
 </body>
 </html>
