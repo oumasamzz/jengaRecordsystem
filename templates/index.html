@@ -83,41 +83,49 @@
                 cont.appendChild(card);
             });
         }
+async function uploadFile() {
+    const fileInput = document.getElementById('up-file');
+    const titleInput = document.getElementById('up-title');
+    const yearInput = document.getElementById('up-year');
 
-        async function uploadFile() {
-            const file = document.getElementById('up-file').files[0];
-            const title = document.getElementById('up-title').value;
-            const year = document.getElementById('up-year').value;
-            if(!file || !title) return alert("Missing fields");
+    if(!fileInput.files[0] || !titleInput.value) {
+        return alert("Please provide both a title and a file.");
+    }
 
-            const fd = new FormData();
-            fd.append('file', file);
-            fd.append('title', title);
-            fd.append('year', year);
+    // Show a "Loading" state on the button
+    const submitBtn = event.target;
+    const originalText = submitBtn.innerText;
+    submitBtn.innerText = "Uploading...";
+    submitBtn.disabled = true;
 
-            const res = await fetch('/api/upload', { method: 'POST', body: fd });
-            if(res.ok) { alert("Success!"); loadReports(); }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('title', titleInput.value);
+    fd.append('year', yearInput.value);
+
+    try {
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const result = await res.json();
+
+        if(res.ok && result.success) {
+            // THE CONFIRMATION MESSAGE
+            alert("🚀 Success! The report has been uploaded and is now live.");
+            
+            // Reset fields
+            titleInput.value = '';
+            fileInput.value = '';
+            loadReports(); 
+        } else {
+            alert("Upload Error: " + (result.error || "Unknown Error"));
         }
-
-        async function deleteReport(id) {
-            if(!confirm("Delete?")) return;
-            const res = await fetch(`/api/delete/${id}`, { 
-                method: 'DELETE',
-                headers: { 'X-Admin-Key': API_KEY }
-            });
-            if(res.ok) loadReports();
-        }
-
-        function openPDF(url) { 
-            document.getElementById('pdf-frame').src = url; 
-            document.getElementById('pdf-viewer').style.display='block'; 
-        }
-        function closePDF() { 
-            document.getElementById('pdf-viewer').style.display='none'; 
-            document.getElementById('pdf-frame').src = ''; 
-        }
-
-        loadReports();
+    } catch (err) {
+        alert("Failed to connect to the server.");
+    } finally {
+        submitBtn.innerText = originalText;
+        submitBtn.disabled = false;
+    }
+}
+       
     </script>
 </body>
 </html>
