@@ -4,47 +4,46 @@ import firebase_admin
 from flask import Flask, render_template, request, jsonify
 from firebase_admin import credentials, storage, firestore
 
-# --- PATH CONFIGURATION ---
-# Ensures Flask finds templates regardless of Vercel's environment
 api_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(api_dir)
 template_dir = os.path.join(root_dir, 'templates')
 
 app = Flask(__name__, template_folder=template_dir)
 
-# --- FIREBASE BOOTSTRAP ---
 def initialize_firebase():
     if not firebase_admin._apps:
         fb_config = os.environ.get("FIREBASE_CONFIG")
+        # Use the exact project ID from your JSON
+        bucket_url = 'jengareports.appspot.com' 
+
         if fb_config:
             try:
-                # strict=False handles newline characters in the private key
-                cred_dict = json.loads(fb_config, strict=False)
-                return firebase_admin.initialize_app(credentials.Certificate(cred_dict), {
-                    'storageBucket': 'jengareports.appspot.com' # <--- UPDATE THIS
-                })
+                config = json.loads(fb_config, strict=False)
+                # CRITICAL FIX: Ensure newlines in the private key are actual newlines
+                if "private_key" in config:
+                    config["private_key"] = config["private_key"].replace("\\n", "\n")
+                
+                cred = credentials.Certificate(config)
+                return firebase_admin.initialize_app(cred, {'storageBucket': bucket_url})
             except Exception as e:
-                print(f"Firebase Config Error: {e}")
+                print(f"ENV INIT ERROR: {e}")
         
         # Local Fallback
         local_path = os.path.join(api_dir, "serviceAccountKey.json")
         if os.path.exists(local_path):
-            return firebase_admin.initialize_app(credentials.Certificate(local_path), {
-                'storageBucket': 'jenga-africa-xxx.appspot.com' # <--- UPDATE THIS
-            })
+            cred = credentials.Certificate(local_path)
+            return firebase_admin.initialize_app(cred, {'storageBucket': bucket_url})
     return firebase_admin.get_app()
 
-# Global Clients
+# Initialize global clients with safety checks
 try:
     firebase_app = initialize_firebase()
     db = firestore.client()
     bucket = storage.bucket()
 except Exception as e:
-    print(f"Initialization Failed: {e}")
+    print(f"GLOBAL BOOTSTRAP ERROR: {e}")
     db = None
     bucket = None
-
-# --- ROUTES ---
 
 @app.route('/')
 def index():
@@ -53,32 +52,32 @@ def index():
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
     if not db:
-        return jsonify({"error": "Database not connected"}), 500
+        return jsonify({"error": "Database Client Not Initialized. Check Vercel Logs."}), 500
     try:
         reports_ref = db.collection('reports')
         docs = reports_ref.stream()
         reports_list = [doc.to_dict() | {"id": doc.id} for doc in docs]
         return jsonify(reports_list)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Firestore Error: {str(e)}"}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
-    if not bucket:
-        return jsonify({"error": "Storage not connected"}), 500
+    if not bucket or not db:
+        return jsonify({"error": "Firebase Services Unavailable"}), 500
     try:
         file = request.files.get('file')
         title = request.form.get('title')
         year = request.form.get('year')
         
-        if not file:
-            return jsonify({"error": "No file"}), 400
+        if not file or not title:
+            return jsonify({"error": "Missing Title or File"}), 400
             
-        # File type detection
         ext = file.filename.split('.')[-1].lower()
-        
         blob = bucket.blob(f"reports/{file.filename}")
-        blob.upload_from_file(file)
+        
+        # Upload with explicit content type
+        blob.upload_from_file(file, content_type=file.content_type)
         blob.make_public()
         
         report_data = {
@@ -88,10 +87,11 @@ def upload():
             "type": ext
         }
         db.collection('reports').add(report_data)
-        return jsonify({"success": True})
+        return jsonify({"success": True, "message": "Report uploaded successfully!"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Upload Failed: {str(e)}"}), 500
 
+# ... keep your delete route ...
 @app.route('/api/delete/<report_id>', methods=['DELETE'])
 def delete(report_id):
     # Verify Admin Key
