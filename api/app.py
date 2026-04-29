@@ -1,49 +1,15 @@
 import os
-import json
-import firebase_admin
 from flask import Flask, render_template, request, jsonify
-from firebase_admin import credentials, storage, firestore
+from imagekitio import ImageKit
 
-api_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(api_dir)
-template_dir = os.path.join(root_dir, 'templates')
+app = Flask(__name__, template_folder='../templates')
 
-app = Flask(__name__, template_folder=template_dir)
-
-def initialize_firebase():
-    if not firebase_admin._apps:
-        fb_config = os.environ.get("FIREBASE_CONFIG")
-        # Use the exact project ID from your JSON
-        bucket_url = 'jengareports.appspot.com' 
-
-        if fb_config:
-            try:
-                config = json.loads(fb_config, strict=False)
-                # CRITICAL FIX: Ensure newlines in the private key are actual newlines
-                if "private_key" in config:
-                    config["private_key"] = config["private_key"].replace("\\n", "\n")
-                
-                cred = credentials.Certificate(config)
-                return firebase_admin.initialize_app(cred, {'storageBucket': bucket_url})
-            except Exception as e:
-                print(f"ENV INIT ERROR: {e}")
-        
-        # Local Fallback
-        local_path = os.path.join(api_dir, "serviceAccountKey.json")
-        if os.path.exists(local_path):
-            cred = credentials.Certificate(local_path)
-            return firebase_admin.initialize_app(cred, {'storageBucket': bucket_url})
-    return firebase_admin.get_app()
-
-# Initialize global clients with safety checks
-try:
-    firebase_app = initialize_firebase()
-    db = firestore.client()
-    bucket = storage.bucket()
-except Exception as e:
-    print(f"GLOBAL BOOTSTRAP ERROR: {e}")
-    db = None
-    bucket = None
+# Initialize ImageKit
+imagekit = ImageKit(
+    public_key=os.environ.get("IK_PUBLIC_KEY"),
+    private_key=os.environ.get("IK_PRIVATE_KEY"),
+    url_endpoint=os.environ.get("IK_URL_ENDPOINT")
+)
 
 @app.route('/')
 def index():
@@ -51,67 +17,61 @@ def index():
 
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
-    if not db:
-        return jsonify({"error": "Database Client Not Initialized. Check Vercel Logs."}), 500
     try:
-        reports_ref = db.collection('reports')
-        docs = reports_ref.stream()
-        reports_list = [doc.to_dict() | {"id": doc.id} for doc in docs]
+        # Fetch files from the /reports folder
+        files = imagekit.list_files({
+            "path": "/reports",
+            "includeFolder": False
+        })
+        
+        # Format the data for your UI
+        # We store Title and Year in 'tags' for simplicity: ["Title", "2026"]
+        reports_list = []
+        for f in files:
+            tags = f.tags if f.tags else ["Untitled", "N/A"]
+            reports_list.append({
+                "id": f.file_id,
+                "title": tags[0],
+                "year": tags[1] if len(tags) > 1 else "N/A",
+                "url": f.url,
+                "type": f.name.split('.')[-1]
+            })
         return jsonify(reports_list)
     except Exception as e:
-        return jsonify({"error": f"Firestore Error: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
-    if not bucket or not db:
-        return jsonify({"error": "Firebase Services Unavailable"}), 500
     try:
         file = request.files.get('file')
         title = request.form.get('title')
         year = request.form.get('year')
-        
-        if not file or not title:
-            return jsonify({"error": "Missing Title or File"}), 400
-            
-        ext = file.filename.split('.')[-1].lower()
-        blob = bucket.blob(f"reports/{file.filename}")
-        
-        # Upload with explicit content type
-        blob.upload_from_file(file, content_type=file.content_type)
-        blob.make_public()
-        
-        report_data = {
-            "title": title,
-            "year": year,
-            "url": blob.public_url,
-            "type": ext
-        }
-        db.collection('reports').add(report_data)
-        return jsonify({"success": True, "message": "Report uploaded successfully!"})
-    except Exception as e:
-        return jsonify({"error": f"Upload Failed: {str(e)}"}), 500
 
-# ... keep your delete route ...
-@app.route('/api/delete/<report_id>', methods=['DELETE'])
-def delete(report_id):
-    # Verify Admin Key
-    if request.headers.get("X-Admin-Key") != "Tandy254./":
-        return jsonify({"error": "Unauthorized"}), 403
+        if not file:
+            return jsonify({"error": "No file provided"}), 400
+
+        # Upload to ImageKit
+        # We store the Title and Year as Tags so we don't need a separate database!
+        upload_res = imagekit.upload_file(
+            file=file.read(),
+            file_name=file.filename,
+            options={
+                "folder": "/reports",
+                "tags": [title, year],
+                "use_unique_file_name": True
+            }
+        )
         
-    try:
-        doc_ref = db.collection('reports').document(report_id)
-        doc = doc_ref.get().to_dict()
-        if doc:
-            # Delete from Storage
-            try:
-                filename = doc['url'].split('/')[-1].split('?')[0]
-                bucket.blob(f"reports/{filename}").delete()
-            except: pass
-            # Delete from Firestore
-            doc_ref.delete()
-        return jsonify({"success": True})
+        return jsonify({"success": True, "url": upload_res.url})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
-    app.run(debug=True)
+@app.route('/api/delete/<file_id>', methods=['DELETE'])
+def delete(file_id):
+    if request.headers.get("X-Admin-Key") != "Tandy254./":
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        imagekit.delete_file(file_id)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

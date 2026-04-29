@@ -62,70 +62,43 @@
     <script>
         const API_KEY = "Tandy254./";
 
-        async function loadReports() {
-            const res = await fetch('/api/reports');
-            const data = await res.json();
-            const cont = document.getElementById('container');
-            cont.innerHTML = '';
-            
-            data.forEach(r => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                let icon = r.type === 'pdf' ? '📕' : (r.type?.includes('xl') ? '📗' : '📄');
-                card.innerHTML = `
-                    <button class="btn-del" onclick="deleteReport('${r.id}')">✕</button>
-                    <div class="icon">${icon}</div>
-                    <h3>${r.title}</h3>
-                    <p style="color:#888">${r.year}</p>
-                    <button class="btn btn-sec" onclick="openPDF('${r.url}')">View</button>
-                    <a href="${r.url}" class="btn btn-main" download>Download</a>
-                `;
-                cont.appendChild(card);
-            });
-        }
+async function loadReports() {
+    const res = await fetch('/api/reports');
+    const data = await res.json();
+    const container = document.getElementById('reports-grid');
+    container.innerHTML = '';
+
+    data.forEach(report => {
+        container.innerHTML += `
+            <div class="report-card">
+                <div class="icon">${report.type.toUpperCase()}</div>
+                <h4>${report.title}</h4>
+                <p>${report.year}</p>
+                <a href="${report.url}" target="_blank" class="btn">View Report</a>
+                <button onclick="deleteReport('${report.id}')" class="admin-only delete-btn">Delete</button>
+            </div>
+        `;
+    });
+}
 async function uploadFile() {
-    const fileInput = document.getElementById('up-file');
-    const titleInput = document.getElementById('up-title');
-    const yearInput = document.getElementById('up-year');
-
-    if(!fileInput.files[0] || !titleInput.value) {
-        return alert("Please provide both a title and a file.");
-    }
-
-    // Show a "Loading" state on the button
-    const submitBtn = event.target;
-    const originalText = submitBtn.innerText;
-    submitBtn.innerText = "Uploading...";
-    submitBtn.disabled = true;
-
     const fd = new FormData();
-    fd.append('file', fileInput.files[0]);
-    fd.append('title', titleInput.value);
-    fd.append('year', yearInput.value);
+    fd.append('file', document.getElementById('up-file').files[0]);
+    fd.append('title', document.getElementById('up-title').value);
+    fd.append('year', document.getElementById('up-year').value);
 
-    try {
-        const res = await fetch('/api/upload', { method: 'POST', body: fd });
-        const result = await res.json();
+    const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: fd
+    });
 
-        if(res.ok && result.success) {
-            // THE CONFIRMATION MESSAGE
-            alert("🚀 Success! The report has been uploaded and is now live.");
-            
-            // Reset fields
-            titleInput.value = '';
-            fileInput.value = '';
-            loadReports(); 
-        } else {
-            alert("Upload Error: " + (result.error || "Unknown Error"));
-        }
-    } catch (err) {
-        alert("Failed to connect to the server.");
-    } finally {
-        submitBtn.innerText = originalText;
-        submitBtn.disabled = false;
+    if (res.ok) {
+        alert("✅ Success! Report uploaded to ImageKit.");
+        loadReports();
+    } else {
+        alert("❌ Error: Check console.");
     }
 }
-       
+
     </script>
 </body>
 </html>
