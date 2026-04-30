@@ -40,38 +40,44 @@ def index():
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
     if not ik:
-        # This will tell you if the variables are actually missing
-        pub = os.environ.get("IK_PUBLIC_KEY")
-        return jsonify({"error": "ImageKit not initialized", "debug": f"Public Key Present: {bool(pub)}"}), 500
-    
+        return jsonify({"error": "IK not initialized"}), 500
     try:
-        # Check if the SDK uses .list_files() or .files.list()
+        # Try the most common SDK list method
         try:
             files_res = ik.list_files({"path": "/"})
         except AttributeError:
             files_res = ik.files.list({"path": "/"})
 
-        # Handle different response formats (Object vs List)
+        # IMPORTANT: ImageKit SDK returns a custom object. 
+        # We must extract the actual list from it.
+        reports_list = []
+        
+        # If files_res is the wrapper object, get the .list attribute
         files = getattr(files_res, 'list', files_res)
         
-        reports_list = []
+        # If it's still not a list, it might be an empty result or error
+        if not isinstance(files, list):
+            return jsonify([])
+
         for f in files:
-            # SDK versions vary: some use dictionaries, some use objects
-            f_dict = f if isinstance(f, dict) else f.__dict__
+            # Check for tags. Some SDK versions use f.tags, others f['tags']
+            tags = getattr(f, 'tags', None) or (f.get('tags') if isinstance(f, dict) else None)
             
-            tags = f_dict.get('tags', [])
-            if tags:
+            if tags and len(tags) > 0:
                 reports_list.append({
-                    "id": f_dict.get('fileId') or f_dict.get('file_id'),
+                    "id": getattr(f, 'file_id', None) or f.get('fileId'),
                     "title": tags[0],
                     "year": tags[1] if len(tags) > 1 else "2026",
-                    "url": f_dict.get('url'),
-                    "type": (f_dict.get('name') or "PDF").split('.')[-1].upper()
+                    "url": getattr(f, 'url', None) or f.get('url'),
+                    "type": (getattr(f, 'name', 'PDF') or 'PDF').split('.')[-1].upper()
                 })
+        
         return jsonify(reports_list)
     except Exception as e:
-        # THIS IS CRITICAL: It sends the actual error message to your screen
-        return jsonify({"error": "Internal Crash", "details": str(e)}), 500
+        # This will now return a 200 with an empty list so the UI doesn't crash, 
+        # but prints the error to your Vercel Logs for you to fix.
+        print(f"DEBUG ERROR: {str(e)}")
+        return jsonify([])
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
