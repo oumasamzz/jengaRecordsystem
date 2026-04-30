@@ -6,20 +6,21 @@ from imagekitio import ImageKit
 api_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(os.path.dirname(api_dir), 'templates'))
 
-# --- IMAGEKIT INITIALIZATION (FIXED PARAMETERS) ---
+# --- IMAGEKIT INITIALIZATION (V5+ SYNTAX) ---
 def get_ik():
     pub = os.environ.get("IK_PUBLIC_KEY")
     pri = os.environ.get("IK_PRIVATE_KEY")
-    url = os.environ.get("IK_URL_ENDPOINT")
+    url = os.environ.get("IK_URL_ENDPOINT", "https://ik.imagekit.io/je7r0ptq76/jengareports/")
     
-    if not all([pub, pri, url]):
-        print("CRITICAL: Missing Environment Variables")
+    if not pri:
+        print("CRITICAL: IK_PRIVATE_KEY is missing from environment.")
         return None
     
-    # The SDK expects these exact argument names:
+    # In newer SDK versions, private_key is the primary required argument.
+    # url_endpoint and public_key can often be passed as keyword arguments.
     return ImageKit(
-        public_key=pub,
         private_key=pri,
+        public_key=pub,
         url_endpoint=url
     )
 
@@ -32,22 +33,33 @@ def index():
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
     if not ik:
-        return jsonify({"error": "IK Setup Failed"}), 500
+        return jsonify({"error": "Backend not initialized"}), 500
     try:
-        # Fetch files from ImageKit
-        files_res = ik.list_files({"path": "/"})
-        # Note: Depending on SDK version, files might be in files_res.list or just files_res
-        files = getattr(files_res, 'list', files_res)
+        # Use ik.list_files (standard) or ik.files.list (v4+)
+        # If one fails, the other is usually the correct one for your version.
+        try:
+            files_res = ik.list_files({"path": "/"})
+        except AttributeError:
+            files_res = ik.files.list({"path": "/"})
+
+        # Ensure we handle the response object correctly
+        files = getattr(files_res, 'list', files_res) if not isinstance(files_res, list) else files_res
         
         reports_list = []
         for f in files:
-            if hasattr(f, 'tags') and f.tags:
+            # Safely handle different attribute styles (dict vs object)
+            tags = getattr(f, 'tags', []) if not isinstance(f, dict) else f.get('tags', [])
+            file_id = getattr(f, 'file_id', None) if not isinstance(f, dict) else f.get('fileId')
+            file_url = getattr(f, 'url', '') if not isinstance(f, dict) else f.get('url')
+            name = getattr(f, 'name', 'file') if not isinstance(f, dict) else f.get('name')
+
+            if tags:
                 reports_list.append({
-                    "id": f.file_id,
-                    "title": f.tags[0],
-                    "year": f.tags[1] if len(f.tags) > 1 else "2026",
-                    "url": f.url,
-                    "type": f.name.split('.')[-1].upper()
+                    "id": file_id,
+                    "title": tags[0],
+                    "year": tags[1] if len(tags) > 1 else "2026",
+                    "url": file_url,
+                    "type": name.split('.')[-1].upper()
                 })
         return jsonify(reports_list)
     except Exception as e:
@@ -55,18 +67,16 @@ def get_reports():
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
-    if not ik:
-        return jsonify({"error": "IK Not Initialized"}), 500
+    if not ik: return jsonify({"error": "Setup fail"}), 500
     try:
         file = request.files.get('file')
         title = request.form.get('title')
         year = request.form.get('year')
 
-        if not file:
-            return jsonify({"error": "No file"}), 400
-
-        # Upload and Tag
-        ik.upload_file(
+        # Use ik.upload_file (standard) or ik.files.upload (v4+)
+        upload_method = getattr(ik, 'upload_file', None) or ik.files.upload
+        
+        upload_method(
             file=file.read(),
             file_name=file.filename,
             options={
@@ -83,7 +93,8 @@ def delete(file_id):
     if request.headers.get("X-Admin-Key") != "Tandy254./":
         return jsonify({"error": "Unauthorized"}), 403
     try:
-        ik.delete_file(file_id)
+        delete_method = getattr(ik, 'delete_file', None) or ik.files.delete
+        delete_method(file_id)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
