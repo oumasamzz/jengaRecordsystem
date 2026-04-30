@@ -40,26 +40,38 @@ def index():
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
     if not ik:
-        return jsonify({"error": "Backend config missing"}), 500
+        # This will tell you if the variables are actually missing
+        pub = os.environ.get("IK_PUBLIC_KEY")
+        return jsonify({"error": "ImageKit not initialized", "debug": f"Public Key Present: {bool(pub)}"}), 500
+    
     try:
-        # Fetch files from the root or 'reports' folder
-        # The SDK returns a list of file objects
-        list_files = ik.list_files({"path": "/"})
+        # Check if the SDK uses .list_files() or .files.list()
+        try:
+            files_res = ik.list_files({"path": "/"})
+        except AttributeError:
+            files_res = ik.files.list({"path": "/"})
+
+        # Handle different response formats (Object vs List)
+        files = getattr(files_res, 'list', files_res)
         
         reports_list = []
-        for f in list_files:
-            # Only include files that have our metadata tags [Title, Year]
-            if f.tags and len(f.tags) >= 1:
+        for f in files:
+            # SDK versions vary: some use dictionaries, some use objects
+            f_dict = f if isinstance(f, dict) else f.__dict__
+            
+            tags = f_dict.get('tags', [])
+            if tags:
                 reports_list.append({
-                    "id": f.file_id,
-                    "title": f.tags[0],
-                    "year": f.tags[1] if len(f.tags) > 1 else "2026",
-                    "url": f.url,
-                    "type": f.name.split('.')[-1].upper()
+                    "id": f_dict.get('fileId') or f_dict.get('file_id'),
+                    "title": tags[0],
+                    "year": tags[1] if len(tags) > 1 else "2026",
+                    "url": f_dict.get('url'),
+                    "type": (f_dict.get('name') or "PDF").split('.')[-1].upper()
                 })
         return jsonify(reports_list)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # THIS IS CRITICAL: It sends the actual error message to your screen
+        return jsonify({"error": "Internal Crash", "details": str(e)}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
