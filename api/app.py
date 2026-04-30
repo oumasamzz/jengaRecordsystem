@@ -2,19 +2,21 @@ import os
 from flask import Flask, render_template, request, jsonify
 from imagekitio import ImageKit
 
-# Standard Vercel pathing for templates
+# Standard Vercel pathing
 api_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(os.path.dirname(api_dir), 'templates'))
 
-# --- IMAGEKIT INITIALIZATION ---
+# --- IMAGEKIT INITIALIZATION (FIXED PARAMETERS) ---
 def get_ik():
     pub = os.environ.get("IK_PUBLIC_KEY")
     pri = os.environ.get("IK_PRIVATE_KEY")
     url = os.environ.get("IK_URL_ENDPOINT")
     
     if not all([pub, pri, url]):
+        print("CRITICAL: Missing Environment Variables")
         return None
-        
+    
+    # The SDK expects these exact argument names:
     return ImageKit(
         public_key=pub,
         private_key=pri,
@@ -30,24 +32,23 @@ def index():
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
     if not ik:
-        return jsonify({"error": "ImageKit variables missing in Vercel"}), 500
+        return jsonify({"error": "IK Setup Failed"}), 500
     try:
-        # Fetching files from the 'reports' folder in ImageKit
-        files = ik.list_files({"path": "/reports"})
+        # Fetch files from ImageKit
+        files_res = ik.list_files({"path": "/"})
+        # Note: Depending on SDK version, files might be in files_res.list or just files_res
+        files = getattr(files_res, 'list', files_res)
         
         reports_list = []
         for f in files:
-            # We use f.tags to store [Title, Year]
-            title = f.tags[0] if (f.tags and len(f.tags) > 0) else "Untitled"
-            year = f.tags[1] if (f.tags and len(f.tags) > 1) else "N/A"
-            
-            reports_list.append({
-                "id": f.file_id,
-                "title": title,
-                "year": year,
-                "url": f.url,
-                "type": f.name.split('.')[-1]
-            })
+            if hasattr(f, 'tags') and f.tags:
+                reports_list.append({
+                    "id": f.file_id,
+                    "title": f.tags[0],
+                    "year": f.tags[1] if len(f.tags) > 1 else "2026",
+                    "url": f.url,
+                    "type": f.name.split('.')[-1].upper()
+                })
         return jsonify(reports_list)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -55,21 +56,20 @@ def get_reports():
 @app.route('/api/upload', methods=['POST'])
 def upload():
     if not ik:
-        return jsonify({"error": "ImageKit not configured"}), 500
+        return jsonify({"error": "IK Not Initialized"}), 500
     try:
         file = request.files.get('file')
         title = request.form.get('title')
         year = request.form.get('year')
 
         if not file:
-            return jsonify({"error": "No file selected"}), 400
+            return jsonify({"error": "No file"}), 400
 
-        # Uploading to ImageKit and tagging it with Title/Year
-        upload_res = ik.upload_file(
+        # Upload and Tag
+        ik.upload_file(
             file=file.read(),
             file_name=file.filename,
             options={
-                "folder": "/reports",
                 "tags": [title, year],
                 "use_unique_file_name": True
             }
