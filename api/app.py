@@ -64,7 +64,7 @@ def get_reports():
 @app.route('/api/upload', methods=['POST'])
 def upload():
     if not ik:
-        return jsonify({"error": "IK not ready"}), 500
+        return jsonify({"error": "ImageKit not initialized. Check Environment Variables."}), 500
     try:
         file = request.files.get('file')
         title = request.form.get('title')
@@ -73,20 +73,36 @@ def upload():
         if not file or not title:
             return jsonify({"error": "Missing file or title"}), 400
 
-        # Upload to ImageKit
-        # We store Title and Year as tags so we don't need a database!
-        ik.upload_file(
-            file=file.read(),
-            file_name=file.filename,
-            options={
-                "tags": [title, year],
-                "use_unique_file_name": True,
-                "folder": "/reports"
-            }
-        )
+        file_content = file.read()
+        file_name = file.filename
+
+        # Strategy: Try both common SDK patterns to ensure compatibility
+        try:
+            # Pattern A: Standard SDK
+            ik.upload_file(
+                file=file_content,
+                file_name=file_name,
+                options={
+                    "tags": [title, year],
+                    "use_unique_file_name": True
+                }
+            )
+        except AttributeError:
+            # Pattern B: Newer SDK v4+ structure
+            ik.files.upload(
+                file=file_content,
+                file_name=file_name,
+                options={
+                    "tags": [title, year],
+                    "use_unique_file_name": True
+                }
+            )
+        
         return jsonify({"success": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # This will print the EXACT error in your Vercel Logs
+        print(f"UPLOAD CRASH: {str(e)}") 
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 @app.route('/api/delete/<file_id>', methods=['DELETE'])
 def delete(file_id):
