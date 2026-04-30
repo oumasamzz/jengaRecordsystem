@@ -2,14 +2,26 @@ import os
 from flask import Flask, render_template, request, jsonify
 from imagekitio import ImageKit
 
-app = Flask(__name__, template_folder='../templates')
+# Standard Vercel pathing for templates
+api_dir = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(api_dir), 'templates'))
 
-# Initialize ImageKit
-imagekit = ImageKit(
-    public_key=os.environ.get("IK_PUBLIC_KEY"),
-    private_key=os.environ.get("IK_PRIVATE_KEY"),
-    url_endpoint=os.environ.get("IK_URL_ENDPOINT")
-)
+# --- IMAGEKIT INITIALIZATION ---
+def get_ik():
+    pub = os.environ.get("IK_PUBLIC_KEY")
+    pri = os.environ.get("IK_PRIVATE_KEY")
+    url = os.environ.get("IK_URL_ENDPOINT")
+    
+    if not all([pub, pri, url]):
+        return None
+        
+    return ImageKit(
+        public_key=pub,
+        private_key=pri,
+        url_endpoint=url
+    )
+
+ik = get_ik()
 
 @app.route('/')
 def index():
@@ -17,22 +29,22 @@ def index():
 
 @app.route('/api/reports', methods=['GET'])
 def get_reports():
+    if not ik:
+        return jsonify({"error": "ImageKit variables missing in Vercel"}), 500
     try:
-        # Fetch files from the /reports folder
-        files = imagekit.list_files({
-            "path": "/reports",
-            "includeFolder": False
-        })
+        # Fetching files from the 'reports' folder in ImageKit
+        files = ik.list_files({"path": "/reports"})
         
-        # Format the data for your UI
-        # We store Title and Year in 'tags' for simplicity: ["Title", "2026"]
         reports_list = []
         for f in files:
-            tags = f.tags if f.tags else ["Untitled", "N/A"]
+            # We use f.tags to store [Title, Year]
+            title = f.tags[0] if (f.tags and len(f.tags) > 0) else "Untitled"
+            year = f.tags[1] if (f.tags and len(f.tags) > 1) else "N/A"
+            
             reports_list.append({
                 "id": f.file_id,
-                "title": tags[0],
-                "year": tags[1] if len(tags) > 1 else "N/A",
+                "title": title,
+                "year": year,
                 "url": f.url,
                 "type": f.name.split('.')[-1]
             })
@@ -42,17 +54,18 @@ def get_reports():
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
+    if not ik:
+        return jsonify({"error": "ImageKit not configured"}), 500
     try:
         file = request.files.get('file')
         title = request.form.get('title')
         year = request.form.get('year')
 
         if not file:
-            return jsonify({"error": "No file provided"}), 400
+            return jsonify({"error": "No file selected"}), 400
 
-        # Upload to ImageKit
-        # We store the Title and Year as Tags so we don't need a separate database!
-        upload_res = imagekit.upload_file(
+        # Uploading to ImageKit and tagging it with Title/Year
+        upload_res = ik.upload_file(
             file=file.read(),
             file_name=file.filename,
             options={
@@ -61,8 +74,7 @@ def upload():
                 "use_unique_file_name": True
             }
         )
-        
-        return jsonify({"success": True, "url": upload_res.url})
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -71,7 +83,7 @@ def delete(file_id):
     if request.headers.get("X-Admin-Key") != "Tandy254./":
         return jsonify({"error": "Unauthorized"}), 403
     try:
-        imagekit.delete_file(file_id)
+        ik.delete_file(file_id)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
